@@ -13,7 +13,7 @@ env:
   BUILD_DIR: build-mac
   ARTIFACT_EXT: mac
   PLUGINVAL_VER: v1.0.2
-  VST3_VER: v3.7.7_build_19
+  VST3_VER: v3.7.7_build_19x
 
 jobs:
   build-mac:
@@ -33,7 +33,14 @@ jobs:
         path: |
           iPlug2/Dependencies/Build
           iPlug2/Dependencies/iPlug
-        key: ${{runner.os}}-${{hashFiles('iPlug2/Dependencies/download-prebuilt-libs.sh', 'iPlug2/Dependencies/IGraphics/build-igraphics-libs-mac.sh', 'iPlug2/Dependencies/IGraphics/build-skia-mac.sh')}}
+        key: ${{runner.os}}-deps-${{hashFiles('iPlug2/Dependencies/download-prebuilt-libs.sh', 'iPlug2/Dependencies/IGraphics/build-igraphics-libs-mac.sh', 'iPlug2/Dependencies/IGraphics/build-skia-mac.sh')}}
+
+    - name: Get Prebuilt Libs
+      if: steps.cache-deps.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        cd iPlug2/Dependencies
+        ./download-prebuilt-libs.sh
 
     - name: Cache VST3 SDK
       id: cache-vst3
@@ -42,13 +49,6 @@ jobs:
         path: |
           iPlug2/Dependencies/IPlug/VST3_SDK
         key: ${{runner.os}}-vst3-${{env.VST3_VER}}
-
-    - name: Get Prebuilt Libs
-      if: steps.cache-deps.outputs.cache-hit != 'true'
-      shell: bash
-      run: |
-        cd iPlug2/Dependencies
-        ./download-prebuilt-libs.sh
 
     - name: Get VST3 SDK
       if: steps.cache-vst3.outputs.cache-hit != 'true'
@@ -64,6 +64,16 @@ jobs:
     #     repository: steinbergmedia/vst3sdk
     #     submodules: recursive
     #     path: "iPlug2/Dependencies/IPlug/VST3_SDK"
+
+    - name: Build VST3 Validator
+      if: steps.cache-vst3.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir VST3_BUILD
+        cd VST3_BUILD
+        cmake ../iPlug2/Dependencies/IPlug/VST3_SDK -DCMAKE_BUILD_TYPE=Release
+        make validator -j
+        mv bin/Release/validator ../iPlug2/Dependencies/IPlug/VST3_SDK
 
     - name: Build
       shell: bash
@@ -110,38 +120,25 @@ jobs:
           curl -L "https://github.com/Tracktion/pluginval/releases/download/${{env.PLUGINVAL_VER}}/pluginval_macOS.zip" -o pluginval.zip
           unzip pluginval
 
-      - name: Cache VST3 SDK
+      - name: Restore VST3 SDK
         id: cache-vst3
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
           path: |
             iPlug2/Dependencies/IPlug/VST3_SDK
           key: ${{runner.os}}-vst3-${{env.VST3_VER}}
 
-      - name: Cache VST3 Validator
-        id: cache-vst3-validator
-        uses: actions/cache@v3
-        with:
-          path: |
-            validator
-          key: ${{runner.os}}-vst3-validator-${{env.VST3_VER}}
-
-      - name: Build VST3 Validator
-        if: steps.cache-vst3-validator.outputs.cache-hit != 'true'
+      - name: Test VST3 with VST3 Validator
         shell: bash
         run: |
-          mkdir VST3_BUILD
-          cd VST3_BUILD
-          cmake iPlug2/Dependencies/IPlug/VST3_SDK -DCMAKE_BUILD_TYPE=Release
-          make validator
-          mv bin/Release/validator .
+          ./iPlug2/Dependencies/IPlug/VST3_SDK/validator ${{env.PROJECT_NAME}}.vst3
 
-      - name: Pluginval VST3
+      - name: Test VST3 with Pluginval
         shell: bash
         run: |
           pluginval.app/Contents/MacOS/pluginval --skip-gui-tests --validate-in-process --output-dir "./bin" --validate ${{env.PROJECT_NAME}}.vst3 || exit 1
 
-      - name: Pluginval AUv2
+      - name: Test AUv2 with Pluginval
         shell: bash
         run: |
           mkdir -p ~/Library/Audio/Plug-Ins/Components
@@ -149,12 +146,12 @@ jobs:
           pgrep -x AudioComponentRegistrar >/dev/null && killall -9 AudioComponentRegistrar; echo "killed AudioComponentRegistrar" || echo "AudioComponentRegistrar Process not found"
           pluginval.app/Contents/MacOS/pluginval --skip-gui-tests --validate-in-process --output-dir "./bin" --validate ~/Library/Audio/Plug-Ins/Components/${{env.PROJECT_NAME}}.component || exit 1
 
-      - name: auval AUv2
+      - name: Test AUv2 with AUval
         shell: bash
         run: |
           ./validate_audiounit.sh config.h
 
-      # - name: auval AUv2 real time safety
+      # - name: Test AUv2 with AUval (RTSafe)
       #   shell: bash
       #   run: |
       #     ./validate_audiounit.sh config.h rtsafe
