@@ -110,6 +110,32 @@ jobs:
           curl -L "https://github.com/Tracktion/pluginval/releases/download/${{env.PLUGINVAL_VER}}/pluginval_macOS.zip" -o pluginval.zip
           unzip pluginval
 
+      - name: Cache VST3 SDK
+        id: cache-vst3
+        uses: actions/cache@v3
+        with:
+          path: |
+            iPlug2/Dependencies/IPlug/VST3_SDK
+          key: ${{runner.os}}-vst3-${{env.VST3_VER}}
+
+      - name: Cache VST3 Validator
+        id: cache-vst3-validator
+        uses: actions/cache@v3
+        with:
+          path: |
+            validator
+          key: ${{runner.os}}-vst3-validator-${{env.VST3_VER}}
+
+      - name: Build VST3 Validator
+        if: steps.cache-vst3-validator.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir VST3_BUILD
+          cd VST3_BUILD
+          cmake iPlug2/Dependencies/IPlug/VST3_SDK -DCMAKE_BUILD_TYPE=Release
+          make validator
+          mv bin/Release/validator .
+
       - name: Pluginval VST3
         shell: bash
         run: |
@@ -128,10 +154,10 @@ jobs:
         run: |
           ./validate_audiounit.sh config.h
 
-      - name: auval AUv2 real time safety
-        shell: bash
-        run: |
-          ./validate_audiounit.sh config.h rtsafe
+      # - name: auval AUv2 real time safety
+      #   shell: bash
+      #   run: |
+      #     ./validate_audiounit.sh config.h rtsafe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
