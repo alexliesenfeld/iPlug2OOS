@@ -13,7 +13,7 @@ env:
   BUILD_DIR: build-mac
   ARTIFACT_EXT: mac
   PLUGINVAL_VER: v1.0.2
-  VST3_VER: v3.7.7_build_19x
+  VST3_VER: v3.7.7_build_19
 
 jobs:
   build-mac:
@@ -55,25 +55,7 @@ jobs:
       shell: bash
       run: |
         cd iPlug2/Dependencies/IPlug
-        ./download-iplug-sdks.sh
-
-    # - name: Checkout VST3 SDK
-    #   if: steps.cache-deps.outputs.cache-hit != 'true'
-    #   uses: actions/checkout@v3.3.0
-    #   with:
-    #     repository: steinbergmedia/vst3sdk
-    #     submodules: recursive
-    #     path: "iPlug2/Dependencies/IPlug/VST3_SDK"
-
-    - name: Build VST3 Validator
-      if: steps.cache-vst3.outputs.cache-hit != 'true'
-      shell: bash
-      run: |
-        mkdir VST3_BUILD
-        cd VST3_BUILD
-        cmake ../iPlug2/Dependencies/IPlug/VST3_SDK -DCMAKE_BUILD_TYPE=Release
-        make validator -j
-        mv bin/Release/validator ../iPlug2/Dependencies/IPlug/VST3_SDK
+        ./download-vst3-sdk.sh ${{env.VST3_VER}} build-validator
 
     - name: Build
       shell: bash
@@ -146,12 +128,12 @@ jobs:
           pgrep -x AudioComponentRegistrar >/dev/null && killall -9 AudioComponentRegistrar; echo "killed AudioComponentRegistrar" || echo "AudioComponentRegistrar Process not found"
           pluginval.app/Contents/MacOS/pluginval --skip-gui-tests --validate-in-process --output-dir "./bin" --validate ~/Library/Audio/Plug-Ins/Components/${{env.PROJECT_NAME}}.component || exit 1
 
-      - name: Test AUv2 with AUval
+      - name: Test AUv2 with auval
         shell: bash
         run: |
           ./validate_audiounit.sh config.h
 
-      # - name: Test AUv2 with AUval (RTSafe)
+      # - name: Test AUv2 with auval (RTSafe)
       #   shell: bash
       #   run: |
       #     ./validate_audiounit.sh config.h rtsafe
